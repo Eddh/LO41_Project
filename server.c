@@ -13,6 +13,7 @@
 
 int main(int argc, char* argv[]){
 
-	printf("server program start\n");
+	printf("SERVER process\t START\n");
+	printf("SERVER process\t END\n");
 	return 0;
 }

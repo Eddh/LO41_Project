@@ -30,7 +30,6 @@ int main(int argc, char *argv[]){
 			}
 		break;
 		default :
-			printf("son père\n");
 			switch(pid_exchanger = fork()){
 				case -1 :
 
@@ -52,7 +51,6 @@ int main(int argc, char *argv[]){
 							}
 						break;
 						default :
-							printf("son père\n");
 							waitpid(pid_exchanger, NULL, 0);
 							waitpid(pid_server, NULL, 0);
 							waitpid(pid_cars, NULL, 0);

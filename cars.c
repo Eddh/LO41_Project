@@ -13,7 +13,8 @@
 
  int main(int argc, char* argv[]){
 
- 	printf("cars program start\n");
+ 	printf("CARS process\t START\n");
+ 	printf("CARS process\t END\n");
 
  	return 0;
  }
