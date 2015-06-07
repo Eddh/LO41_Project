@@ -10,10 +10,11 @@
 #include <sys/types.h>
 #include <sys/ipc.h>
 #include <sys/msg.h>
+#include "defs.h"
 
 int main(int argc, char* argv[]){
 
-	printf("SERVER process\t START\n");
-	printf("SERVER process\t END\n");
+	printf("SERVER process\t   START\n");
+	printf("SERVER process\t   END\n");
 	return 0;
 }
