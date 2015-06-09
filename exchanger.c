@@ -5,11 +5,13 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdint.h>
 #include <unistd.h>
 #include <errno.h>
 #include <sys/types.h>
 #include <sys/ipc.h>
 #include <sys/msg.h>
+#include <sys/shm.h>
 #include <pthread.h>
 #include <string.h>
 #include <signal.h>
@@ -36,7 +38,23 @@ int main(int argc, char* argv[]){
 	int i = 0;
 	pthread_t threadId[4];
 	int ppid = getppid();
-	
+	key_t key;
+	int shmId = -1;
+	Exchanger* shExchangers = NULL;
+
+	key = ftok("main", 'a');
+	if(key == -1){
+		printf(" error exchanger.c:ftok errno : %d\n", errno);
+	}
+	shmId = shmget(key, sizeof(Exchanger*)*4, 0666);
+	if(shmId == -1){
+		printf("error exchanger.c:shmget errno : %d\n", errno);
+	}
+	shExchangers = (Exchanger*)shmat(shmId, (void*)0, 0);
+	if(shExchangers == (Exchanger*)-1){
+		printf("error exchangers:shmat errno %d %d\n", errno, shmId);
+	}
+	printf("test exchanger.c : %s shmId : %d address : %0x\n", shExchangers[2].name, shmId, shExchangers);
 
 	for (i = 0 ; i<4 ; i++){
 		pthread_create(&threadId[i], NULL, &run, (void*)i);
