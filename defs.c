@@ -60,6 +60,11 @@ void create4ExchangersCity(Exchanger* exchangers){
 	exchangers[TOP_LEFT].roads[LEFT] = (Exchanger*)(-1);
 	exchangers[TOP_LEFT].roads[BOT] = (Exchanger*)((&exchangers[BOT_LEFT] - exchangers) * sizeof(Exchanger));
 
+	exchangers[BOT_LEFT].exchangerIndex = 0;
+	exchangers[BOT_RIGHT].exchangerIndex = 1;
+	exchangers[TOP_RIGHT].exchangerIndex = 2;
+	exchangers[TOP_LEFT].exchangerIndex = 3;
+
 }
 /*******************************************************************
 				getRandomExchanger :				

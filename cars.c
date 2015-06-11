@@ -18,13 +18,16 @@
 #include "defs.h"
 
 Exchanger* shExchangers;
-
+int msgqId;
+/*******************************************************************				
+				  		THREAD FUNCTION
+********************************************************************/
 void * run(void * input){
 	int carId = -1, direction = -1, from = -1;
 	char *exchangerName = NULL;
 	char *fromName = NULL;
 	char *dirName = NULL;
-
+	int msgqIdLocal = 0;
 	threadCarData* data = (threadCarData*)input;
 	carId = data->carId;
 
@@ -35,12 +38,34 @@ void * run(void * input){
 	direction = getRndDirection(location, from);
 	futureLocation = getExchanger(shExchangers, location->roads[direction]);
 
+	msgqIdLocal = location->msgqId;
 	fromName = location->roadNames[from];
 	dirName = location->roadNames[direction];
 	
 	exchangerName = location->name;
+	Car thisCar;
+	
+
+	CarMsg carMsg;
+	carMsg.mtype = 1;
+	carMsg.carId = carId;
+	carMsg.locIndex = location->exchangerIndex;
+	carMsg.from = from;
+	carMsg.direction = direction;
+	carMsg.action = ENTERING;
+
+	AuthAsk authAsk;
+	authAsk.mtype = 2;
+	authAsk.carId = carId;
+	authAsk.from = from;
+	authAsk.direction = direction;
+
 	printf("car number %d created at exchanger %s, entering through %s with direction %s\n", carId, exchangerName, fromName, dirName);
+/*******************************************************************				
+				  			CAR LOOP
+********************************************************************/
 	do {
+		msgsnd(msgqIdLocal, &carMsg, sizeof(CarMsg) - sizeof(long), 0);
 		printf("car %d on the road %s to crossroad %s\n", carId, fromName, exchangerName);
 		// simulating travel
 		usleep(1000000);
@@ -48,12 +73,24 @@ void * run(void * input){
 			, carId, exchangerName, fromName, dirName);
 
 		//todo : can the car go through?
+		authAsk.mtype = 2;
+		authAsk.carId = carId;
+		authAsk.from = from;
+		authAsk.direction = direction;
+		msgsnd(msgqIdLocal, &authAsk, sizeof(AuthAsk) - sizeof(long), 0);
+
+		carMsg.action = CROSSING;
+		msgsnd(msgqIdLocal, &carMsg, sizeof(carMsg) - sizeof(long), 0);
+
 		printf("car %d going through exchanger %s, from %s to %s\n", carId, exchangerName, fromName, dirName);
 		usleep(200000);
+
+		carMsg.action = LEAVING;
+		msgsnd(msgqIdLocal, &carMsg, sizeof(carMsg) - sizeof(long), 0);
 		printf("car %d leaving exchanger %s, through road %s\n", carId, exchangerName, dirName);
 		usleep(1000000);
 		prevLocation = location;
-		
+		msgsnd(msgqIdLocal, &authAsk, sizeof(AuthAsk) - sizeof(long), 0);
 		//// going to new Exchanger
 		if(location->roads[direction] != (Exchanger*)(-1)){
 			location = getExchanger(shExchangers, location->roads[direction]);
@@ -62,6 +99,12 @@ void * run(void * input){
 			fromName = location->roadNames[from];
 			dirName = location->roadNames[direction];
 			exchangerName = location->name;
+			msgqIdLocal = location->msgqId;
+
+			carMsg.locIndex = location->exchangerIndex;
+			carMsg.from = from;
+			carMsg.direction = direction;
+			carMsg.action = ENTERING;
 		}
 		else{
 			location = NULL;
@@ -83,14 +126,14 @@ void * run(void * input){
  	int nbCars = NBCARS, i = 0;
  	int ppid = getppid();
  
- 	key_t key;
+ 	key_t shmKey, msgKey;
 	int shmId = -1;
 	//// attachment to segment of shared memory containing Exchangers
- 	key = ftok("main", 'a');
-	if(key == -1){
+ 	shmKey = ftok("main", 'a');
+	if(shmKey == -1){
 		printf(" error cars.c:ftok errno : %d\n", errno);
 	}
-	shmId = shmget(key, sizeof(Exchanger*)*4, 0666);
+	shmId = shmget(shmKey, sizeof(Exchanger*)*4, 0666);
 	if(shmId == -1){
 		printf("error cars.c:shmget errno : %d\n", errno);
 	}
@@ -98,8 +141,15 @@ void * run(void * input){
 	if(shExchangers == (Exchanger*)(-1)){
 		printf("error cars:shmat errno %d %d\n", errno, shmId);
 	}
-	printf("test cars.c : %s shmId : %d address : %li\n", shExchangers[2].name, shmId, (uintptr_t)shExchangers);
 
+	msgKey = ftok("main", 'a');
+	if(msgKey == -1){
+		printf("error cars.c:ftok errno %d\n", errno);
+	}
+	msgqId = msgget(msgKey, 0666 | IPC_CREAT);
+	if(msgqId == -1){
+		printf("error cars.c:msgget errno%d\n", errno);
+	}
 
  	if(argc == 2){
  		nbCars = atoi(argv[1]);

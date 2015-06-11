@@ -23,29 +23,44 @@
 #define TOP_RIGHT 2
 #define TOP_LEFT 3
 
+#define ENTERING 0
+#define WAITING 1
+#define CROSSING 2
+#define LEAVING 3
+
+
+
 typedef struct Exchanger{
 	struct Exchanger* roads[4];
 	char name[16];
 	char roadNames[4][16];
+	int exchangerIndex;
+	int msgqId;
 } Exchanger;
 
 typedef struct Car{
 	int carId;
 	unsigned int locIndex;
 	int from, direction;
-
 } Car;
 
 typedef struct CarMsg{
 	long mtype;
-	Car car;
-
+	int carId;
+	unsigned int locIndex;
+	int from, direction;
+	int action;// ENTERING 0, WAITING 1, CROSSING 2, LEAVING 3 
 } CarMsg;
 
-typedef struct AuthMsg{
+typedef struct AuthAsk{
+	long mtype;
+	int carId;
+	int from, direction;
+} AuthAsk;
+typedef struct AuthAns{
 	long mtype;
 	int Authorization;
-} AuthMsg;
+} AuthAns;
 
 typedef struct threadCarData{
 	int carId;
