@@ -23,6 +23,7 @@
 //pthread_mutex_t ThreadNum_Mutex = PTHREAD_MUTEX_INITIALIZER;
 Exchanger* shExchangers;
 sem_t* semShExchangers;
+sem_t* semShContinue;
 int* p_continue;
 
 int msgqId;
@@ -31,7 +32,7 @@ int msgqId;
 char *actionNames[4];
 
 void* run(void* input){
-	int exchangerIndex = 0;
+	int exchangerIndex = 0, boolContinue;
 
 	//pthread_mutex_lock(&ThreadNum_Mutex);
 
@@ -55,8 +56,10 @@ void* run(void* input){
 				printf("error exchanger.c:switch\n");
 			break;
 		}
-
-	}while(*p_continue);
+	sem_wait(semShContinue);
+	boolContinue = *p_continue;
+	sem_post(semShContinue);
+	}while(boolContinue);
 
 	//pthread_mutex_unlock(&ThreadNum_Mutex);
 
@@ -115,10 +118,19 @@ int main(int argc, char* argv[]){
 	if(msgqId == -1){
 		printf("error exchangers.c:msgget errno%d\n", errno);
 	}
-
+	//// ACCESSING THE SEMAPHORE ON BOOLEAN CONTINUE
+	semShContinue = sem_open("semShContinue", O_CREAT, 0666, 1);
+	if(semShContinue == SEM_FAILED){
+		printf("error exchangers.c:sem_open errno = %d, unspecified behavior\n", errno);
+		sem_wait(semShContinue);
+	}
 	//// ATTRIBUTING MESSAGES QUEUES TO EACH EXCHANGER THREAD
 	semShExchangers = sem_open("shExchangers", 0);
-	sem_wait(semShExchangers);
+	if(semShExchangers == SEM_FAILED){
+		printf("error exchangers.c:sem_open errno = %d, unspecified behavior\n", errno);
+		sem_wait(semShExchangers);
+	}
+	
 
 	for (i = 0 ; i < 4 ; i++){
 		msgKeyExchangers[i] = ftok("main", i+1);
@@ -131,6 +143,7 @@ int main(int argc, char* argv[]){
 		}
 		shExchangers[i].msgqId = msgqIdExchangers[i];
 	}
+
 	// thread creation
 	for (i = 0 ; i<4 ; i++){
 		pthread_create(&threadId[i], NULL, &run, (void*)i);

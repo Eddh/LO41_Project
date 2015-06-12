@@ -19,6 +19,7 @@
 
 
 int* p_continue;
+sem_t* semShContinue;
 
 void* sigusr1_handler(int sig)
 {
@@ -27,7 +28,9 @@ void* sigusr1_handler(int sig)
 void* sigIntHandler(int sig){
 
 	printf("STOP\n");
+	sem_wait(semShContinue);
 	*p_continue = 0;
+	sem_post(semShContinue);
 	return 0;
 }
 
@@ -111,7 +114,17 @@ int main(int argc, char *argv[]){
 	}
 
 	//// CREATING THE SEMAPHORE ON SHEXCHANGERS
-	semShExchangers = sem_open("shExchangers", 0, 0666, 1);
+	semShExchangers = sem_open("shExchangers", O_CREAT, 0666, 1);
+	if(semShExchangers == SEM_FAILED){
+		printf("error exchangers.c:sem_open errno = %d, unspecified behavior\n", errno);
+		sem_wait(semShExchangers);
+	}
+	//// CREATING THE SEMAPHORE ON BOOLEAN CONTINUE
+	semShContinue = sem_open("semShContinue", O_CREAT, 0666, 1);
+	if(semShContinue == SEM_FAILED){
+		printf("error exchangers.c:sem_open errno = %d, unspecified behavior\n", errno);
+		sem_wait(semShContinue);
+	}
 
 	create4ExchangersCity(shExchangers);
 	//// USER INPUT
