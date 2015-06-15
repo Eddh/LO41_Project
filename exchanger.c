@@ -25,16 +25,30 @@ Exchanger* shExchangers;
 sem_t* semShExchangers;
 sem_t* semShContinue;
 int* p_continue;
-
 int msgqId;
+int msgqIdExchangers[4];
 
 
 char *actionNames[4];
 
+void sigIntHandler(int sig){
+	EndMsg endMsg;
+	endMsg.mtype = 4;
+	int i = 0;
+
+	sem_wait(semShContinue);
+	*p_continue = 0;
+	sem_post(semShContinue);
+	for(i = 0 ; i < 4 ; i++){
+		msgsnd(msgqIdExchangers[i], &endMsg, sizeof(EndMsg) - sizeof(long), 0);
+	}
+	printf("hello\n");
+}
+
 void* run(void* input){
 	int exchangerIndex = 0, boolContinue;
 
-	//pthread_mutex_lock(&ThreadNum_Mutex);
+	
 
 	memcpy(&exchangerIndex, &input, sizeof(int));
 	printf("EXCHANGER thread %d START\n", exchangerIndex);
@@ -43,25 +57,28 @@ void* run(void* input){
 	Exchanger* thisExchanger = &shExchangers[exchangerIndex];
 	printf("EXCHANGER index %d name %s\n", exchangerIndex, thisExchanger->name);
 	do{
-		msgrcv(thisExchanger->msgqId, &carMsg, sizeof(CarMsg) - sizeof(long), -3, 0);
+		msgrcv(thisExchanger->msgqId, &carMsg, sizeof(CarMsg) - sizeof(long), -4, 0);
 		switch(carMsg.mtype){
 			case 1 : // CarMsg
-				printf("Exchanger %s has received a message from car %d which is %s\n", thisExchanger->name, carMsg.carId, actionNames[carMsg.action]);
+				//printf("Exchanger %s has received a message from car %d which is %s\n", thisExchanger->name, carMsg.carId, actionNames[carMsg.action]);
 			break;
 			case 2 : // AuthAsk
+				printf("Exchanger %s has received a message from car %d which asks to cross\n", thisExchanger->name, carMsg.carId);
 			break;
 			case 3 : // AuthAns
 			break;
+			case 4 : // EndMsg
+
 			default :
 				printf("error exchanger.c:switch\n");
 			break;
 		}
-	sem_wait(semShContinue);
-	boolContinue = *p_continue;
-	sem_post(semShContinue);
+		sem_wait(semShContinue);
+		boolContinue = *p_continue;
+		sem_post(semShContinue);
 	}while(boolContinue);
+	printf("THREAD EXCHANGER %d END\n", exchangerIndex);
 
-	//pthread_mutex_unlock(&ThreadNum_Mutex);
 
 	return NULL;
 }			
@@ -73,13 +90,19 @@ int main(int argc, char* argv[]){
 	int i = 0;
 	pthread_t threadId[4];
 	int ppid = getppid();
-	key_t key, msgKey, msgKeyExchangers[4], contMsgqKey;
+	key_t key, msgKey, msgKeyExchangers[4], contShmKey;
 	int shmId = -1, shmContId = -1;
-	int msgqIdExchangers[4];
+	
 	actionNames[0] = "ENTERING";
 	actionNames[1] = "WAITING";
 	actionNames[2] = "CROSSING";
 	actionNames[3] = "LEAVING";
+
+	//// PREPARATION FOR SIGINT HANDLER
+	struct sigaction sa_SigInt;
+	sa_SigInt.sa_handler = sigIntHandler;
+	sa_SigInt.sa_flags = 0;
+	sigemptyset(&sa_SigInt.sa_mask);
 
 	//// ACCESSING SHARED MEMORY FOR EXCHANGERS
 	key = ftok("main", 'a');
@@ -95,19 +118,20 @@ int main(int argc, char* argv[]){
 		printf("error exchangers:shmat errno %d %d\n", errno, shmId);
 	}
 	//// ACCESSING SHARED MEMORY FOR BOOLEAN "CONTINUE"
-	contMsgqKey = ftok("main", 'b');
-	if(contMsgqKey == -1){
+	contShmKey = ftok("main", 'b');
+	if(contShmKey == -1){
 		printf(" error ftok\n");
 	}
-	shmContId = shmget(contMsgqKey, sizeof(int), IPC_CREAT | 0666);
+	shmContId = shmget(contShmKey, sizeof(int), IPC_CREAT | 0666);
 	if(shmContId == -1){
 		printf("error shmget\n");
-		shmctl(shmId, IPC_RMID, NULL);
+		shmctl(shmContId, IPC_RMID, NULL);
 	}
 	p_continue = (int*)shmat(shmContId, (void*)0, 0);
 	if(p_continue == (int*)-1){
 		printf("error shmat errno %d %d %s\n", errno, shmId, argv[0]);
 	}
+	printf(" exchanger shmContId : %d\n",shmContId);
 
 	//// ACCESSING MAIN MESSAGE QUEUE
 	msgKey = ftok("main", 'a');
@@ -119,10 +143,9 @@ int main(int argc, char* argv[]){
 		printf("error exchangers.c:msgget errno%d\n", errno);
 	}
 	//// ACCESSING THE SEMAPHORE ON BOOLEAN CONTINUE
-	semShContinue = sem_open("semShContinue", O_CREAT, 0666, 1);
+	semShContinue = sem_open("semShContinue", 0);
 	if(semShContinue == SEM_FAILED){
 		printf("error exchangers.c:sem_open errno = %d, unspecified behavior\n", errno);
-		sem_wait(semShContinue);
 	}
 	//// ATTRIBUTING MESSAGES QUEUES TO EACH EXCHANGER THREAD
 	semShExchangers = sem_open("shExchangers", 0);
@@ -143,19 +166,28 @@ int main(int argc, char* argv[]){
 		}
 		shExchangers[i].msgqId = msgqIdExchangers[i];
 	}
-
+	sem_post(semShExchangers);
 	// thread creation
 	for (i = 0 ; i<4 ; i++){
 		pthread_create(&threadId[i], NULL, &run, (void*)i);
 	}
-	sem_post(semShExchangers);
+	
 	// signals the parent that all exchangers threads have been created
+	if(sigaction(SIGINT, &sa_SigInt, NULL) == -1){
+		printf("error main.c : main : sigaction\n");
+	}
 	kill(ppid, SIGUSR1);
 
 	for (i = 0 ; i<4 ; i++){
 		pthread_join(threadId[i], NULL);
+		printf("okkk thread %d joined\n\n\n", i);
 	}
 	
+	//// REMOVING MESSAGE QUEUES FOR EACH EXCHANGER
+	for (i = 0 ; i < 4 ; i++){
+		msgctl(msgqIdExchangers[i], IPC_RMID, NULL);
+	}
+
 	printf("EXCHANGER process  END\n");
 
 	return 0;

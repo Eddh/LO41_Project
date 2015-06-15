@@ -25,13 +25,12 @@ void* sigusr1_handler(int sig)
 {
 	return 0;
 }
-void* sigIntHandler(int sig){
+void sigIntHandler(int sig){
 
-	printf("STOP\n");
 	sem_wait(semShContinue);
 	*p_continue = 0;
 	sem_post(semShContinue);
-	return 0;
+	printf("STOP\n");
 }
 
 // void* inputEventThread(){
@@ -48,7 +47,7 @@ int main(int argc, char *argv[]){
 	int nbCars = NBCARS;
 	int shmId = 0, shmContId = 0, msgqId;
 	char nbCarsString[32];
-	key_t key, msgKey, contMsgqKey;
+	key_t key, msgKey, contShmKey;
 	char* input = NULL;
 	size_t len = 0, nbCarsStringLen = 32;
 	ssize_t read = 0;
@@ -67,10 +66,10 @@ int main(int argc, char *argv[]){
 	sigfillset(&letSigUsr1Mask);
 	sigdelset(&letSigUsr1Mask, SIGUSR1);
 
-	struct sigaction sa_SigStop;
-	sa_SigStop.sa_handler = sigIntHandler;
-	sa_SigStop.sa_flags = 0;
-	sigemptyset(&sa_SigStop.sa_mask);
+	struct sigaction sa_SigInt;
+	sa_SigInt.sa_handler = sigIntHandler;
+	sa_SigInt.sa_flags = 0;
+	sigemptyset(&sa_SigInt.sa_mask);
 
 
 	//// CREATING THE SHARED MEMORY SEGMENT WHICH WILL CONTAIN EXCHANGERS
@@ -89,14 +88,14 @@ int main(int argc, char *argv[]){
 	}
 
 	//// CREATING SHARED MEMORY SEGMENT FOR BOOLEAN "CONTINUE"
-	contMsgqKey = ftok("main", 'b');
-	if(contMsgqKey == -1){
+	contShmKey = ftok("main", 'b');
+	if(contShmKey == -1){
 		printf(" error ftok\n");
 	}
-	shmContId = shmget(contMsgqKey, sizeof(int), IPC_CREAT | 0666);
+	shmContId = shmget(contShmKey, sizeof(int), IPC_CREAT | 0666);
 	if(shmContId == -1){
 		printf("error shmget\n");
-		shmctl(shmId, IPC_RMID, NULL);
+		shmctl(shmContId, IPC_RMID, NULL);
 	}
 	p_continue = (int*)shmat(shmContId, (void*)0, 0);
 	if(p_continue == (int*)-1){
@@ -117,20 +116,17 @@ int main(int argc, char *argv[]){
 	semShExchangers = sem_open("shExchangers", O_CREAT, 0666, 1);
 	if(semShExchangers == SEM_FAILED){
 		printf("error exchangers.c:sem_open errno = %d, unspecified behavior\n", errno);
-		sem_wait(semShExchangers);
 	}
 	//// CREATING THE SEMAPHORE ON BOOLEAN CONTINUE
 	semShContinue = sem_open("semShContinue", O_CREAT, 0666, 1);
 	if(semShContinue == SEM_FAILED){
 		printf("error exchangers.c:sem_open errno = %d, unspecified behavior\n", errno);
-		sem_wait(semShContinue);
 	}
 
 	create4ExchangersCity(shExchangers);
 	//// USER INPUT
 	do {
 		printf("please enter the number of cars you wish(1 to 1000), nothing->%d : ", NBCARS);
-		printf("\b\b\b\b\b\b\b\b\b                ");
 		if(read = getline(&input, &len, stdin) == -1){
 		printf("error main.c:main:getline\n");
 		}
@@ -178,8 +174,6 @@ int main(int argc, char *argv[]){
 							}
 						break;
 						default : // parent
-							
-							printf("père mouru\n");
 						break;
 					}
 				break;
@@ -188,14 +182,15 @@ int main(int argc, char *argv[]){
 	}
 //because every process has executed another main(), only the parent execute the following :
 
-	if(sigaction(SIGINT, &sa_SigStop, NULL) == -1){
+	if(sigaction(SIGINT, &sa_SigInt, NULL) == -1){
 		printf("error main.c : main : sigaction\n");
 	}
 /*******************************************************************				
 				  END PREPARATION
 ********************************************************************/
-
-	waitpid(pid_exchanger, NULL, 0);
+	int status = -42;
+	waitpid(pid_exchanger, &status, 0);
+	printf("pid_exchanger end status = %d\n", status);
 	waitpid(pid_server, NULL, 0);
 	waitpid(pid_cars, NULL, 0);
 	printf("test : %s\n", shExchangers[2].name);
@@ -203,6 +198,9 @@ int main(int argc, char *argv[]){
 		printf("error shmdt %d\n", errno);
 	}
 	if(shmctl(shmId, IPC_RMID, NULL) == -1){
+		printf("error shmctl\n");
+	}
+	if(shmctl(shmContId, IPC_RMID, NULL) == -1){
 		printf("error shmctl\n");
 	}
 	if(msgctl(msgqId, IPC_RMID, NULL) == -1){

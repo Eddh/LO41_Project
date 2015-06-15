@@ -19,6 +19,9 @@
 
 Exchanger* shExchangers;
 int msgqId;
+// mutexDir and dirAvailable initialized in main function
+pthread_mutex_t mutexDir[4][4] = {PTHREAD_MUTEX_INITIALIZER};
+int dirAvailable[4][4];
 /*******************************************************************				
 				  		THREAD FUNCTION
 ********************************************************************/
@@ -28,6 +31,7 @@ void * run(void * input){
 	char *fromName = NULL;
 	char *dirName = NULL;
 	int msgqIdLocal = 0;
+	int locIndex = 0;
 	threadCarData* data = (threadCarData*)input;
 	carId = data->carId;
 
@@ -41,6 +45,7 @@ void * run(void * input){
 	msgqIdLocal = location->msgqId;
 	fromName = location->roadNames[from];
 	dirName = location->roadNames[direction];
+	locIndex = location->exchangerIndex;
 	
 	exchangerName = location->name;
 	Car thisCar;
@@ -69,7 +74,7 @@ void * run(void * input){
 		printf("car %d on the road %s to crossroad %s\n", carId, fromName, exchangerName);
 		// simulating travel
 		usleep(1000000);
-		printf("car %d arrived at exchanger %s, through road %s with direction %s, verifying if going through is possible\n"
+		printf("car %d arrived at exchanger %s, through road %s with direction %s, verifying availability\n"
 			, carId, exchangerName, fromName, dirName);
 
 		//todo : can the car go through?
@@ -79,18 +84,108 @@ void * run(void * input){
 		authAsk.direction = direction;
 		msgsnd(msgqIdLocal, &authAsk, sizeof(AuthAsk) - sizeof(long), 0);
 
+		// checking availability of the road in order to avoid collisions, and then indicating others car if the road is clear thanks to booleans, protected by a mutex each
+		pthread_mutex_lock(&mutexDir[locIndex][EAST]); pthread_mutex_lock(&mutexDir[locIndex][NORTH]); pthread_mutex_lock(&mutexDir[locIndex][WEST]); pthread_mutex_lock(&mutexDir[locIndex][SOUTH]);
+
+		if(direction == invDirection(from)){ // if the car is going straight ahead, block only the perpendicular direction
+			if(dirAvailable[locIndex][direction]){
+				dirAvailable[locIndex][(direction + 1)%4] = 0;
+				dirAvailable[locIndex][(direction + 3)%4] = 0;
+				printf("car %d : road clear, going to cross exchanger %s \n", carId, exchangerName);
+			}
+			else{
+				// active wait
+				printf("car %d  : can't cross, %d %d %d %d waiting\n", carId, dirAvailable[locIndex][0], dirAvailable[locIndex][1], dirAvailable[locIndex][2], dirAvailable[locIndex][3]);
+				do{
+					pthread_mutex_unlock(&mutexDir[locIndex][EAST]); pthread_mutex_unlock(&mutexDir[locIndex][NORTH]); pthread_mutex_unlock(&mutexDir[locIndex][WEST]); pthread_mutex_unlock(&mutexDir[locIndex][SOUTH]);
+					usleep(50000);
+					pthread_mutex_lock(&mutexDir[locIndex][EAST]); pthread_mutex_lock(&mutexDir[locIndex][NORTH]); pthread_mutex_lock(&mutexDir[locIndex][WEST]); pthread_mutex_lock(&mutexDir[locIndex][SOUTH]);
+				}while(!dirAvailable[locIndex][direction]);
+				printf("car %d  : road liberated, going to cross exchanger\n", carId);
+				dirAvailable[locIndex][(direction + 1)%4] = 0;
+				dirAvailable[locIndex][(direction + 3)%4] = 0;
+			}
+		}
+		else if(direction == (from + 3)%4){ // if the car is turning to the left, block every direction
+			if(dirAvailable[locIndex][direction] && dirAvailable[locIndex][(direction + 1)%4] && dirAvailable[locIndex][(direction + 2)%4] && dirAvailable[locIndex][(direction + 3)%4]){
+				dirAvailable[locIndex][0] = 0;
+				dirAvailable[locIndex][1] = 0;
+				dirAvailable[locIndex][2] = 0;
+				dirAvailable[locIndex][3] = 0;
+				printf("car %d : road clear, going to cross exchanger %s \n", carId, exchangerName);
+			}
+			else{
+				// active wait
+				printf("car %d  : can't cross, %d %d %d %d waiting\n", carId, dirAvailable[locIndex][0], dirAvailable[locIndex][1], dirAvailable[locIndex][2], dirAvailable[locIndex][3]);
+				do{
+					pthread_mutex_unlock(&mutexDir[locIndex][EAST]); pthread_mutex_unlock(&mutexDir[locIndex][NORTH]); pthread_mutex_unlock(&mutexDir[locIndex][WEST]); pthread_mutex_unlock(&mutexDir[locIndex][SOUTH]);
+					usleep(50000);
+					pthread_mutex_lock(&mutexDir[locIndex][EAST]); pthread_mutex_lock(&mutexDir[locIndex][NORTH]); pthread_mutex_lock(&mutexDir[locIndex][WEST]); pthread_mutex_lock(&mutexDir[locIndex][SOUTH]);
+				}while(!(dirAvailable[locIndex][direction] && dirAvailable[locIndex][(direction + 1)%4] && dirAvailable[locIndex][(direction + 2)%4] && dirAvailable[locIndex][(direction + 3)%4]));
+				printf("car %d  : road liberated, going to cross exchanger\n", carId);
+				dirAvailable[locIndex][0] = 0;
+				dirAvailable[locIndex][1] = 0;
+				dirAvailable[locIndex][2] = 0;
+				dirAvailable[locIndex][3] = 0;
+			}
+
+		}
+		else if(direction == (from + 1)%4){ // if the car is turning to the right, block the direction and the left relative to the direction
+			if(dirAvailable[locIndex][direction] && dirAvailable[locIndex][(direction + 3)%4] && dirAvailable[locIndex][(direction + 1)%4]){
+				dirAvailable[locIndex][direction] = 0;
+				dirAvailable[locIndex][(direction + 1)%4] = 0;
+				printf("car %d : road clear, going to cross exchanger %s \n", carId, exchangerName);
+			}
+			else{
+				// active wait
+				printf("car %d  : can't cross, %d %d %d %d waiting\n", carId, dirAvailable[locIndex][0], dirAvailable[locIndex][1], dirAvailable[locIndex][2], dirAvailable[locIndex][3]);
+				do{
+					pthread_mutex_unlock(&mutexDir[locIndex][EAST]); pthread_mutex_unlock(&mutexDir[locIndex][NORTH]); pthread_mutex_unlock(&mutexDir[locIndex][WEST]); pthread_mutex_unlock(&mutexDir[locIndex][SOUTH]);
+					usleep(50000);
+					pthread_mutex_lock(&mutexDir[locIndex][EAST]); pthread_mutex_lock(&mutexDir[locIndex][NORTH]); pthread_mutex_lock(&mutexDir[locIndex][WEST]); pthread_mutex_lock(&mutexDir[locIndex][SOUTH]);
+				}while(!(dirAvailable[locIndex][direction] && dirAvailable[locIndex][(direction + 3)%4] && dirAvailable[locIndex][(direction + 1)%4]));
+				printf("car %d  : road liberated, going to cross exchanger\n", carId);
+				dirAvailable[locIndex][direction] = 0;
+				dirAvailable[locIndex][(direction + 1)%4] = 0;
+			}
+		}
+		printf(" booleans after entering : E %d N %d W %d S %d \n", dirAvailable[locIndex][0], dirAvailable[locIndex][1], dirAvailable[locIndex][2], dirAvailable[locIndex][3]);
+		pthread_mutex_unlock(&mutexDir[locIndex][EAST]); pthread_mutex_unlock(&mutexDir[locIndex][NORTH]); pthread_mutex_unlock(&mutexDir[locIndex][WEST]); pthread_mutex_unlock(&mutexDir[locIndex][SOUTH]);
+
 		carMsg.action = CROSSING;
 		msgsnd(msgqIdLocal, &carMsg, sizeof(carMsg) - sizeof(long), 0);
 
 		printf("car %d going through exchanger %s, from %s to %s\n", carId, exchangerName, fromName, dirName);
 		usleep(200000);
 
+		// liberating the road in order to let other cars go through
+		pthread_mutex_lock(&mutexDir[locIndex][EAST]); pthread_mutex_lock(&mutexDir[locIndex][NORTH]); pthread_mutex_lock(&mutexDir[locIndex][WEST]); pthread_mutex_lock(&mutexDir[locIndex][SOUTH]);
+		if(direction == invDirection(from)){ // if the car is going straight ahead, block only the perpendicular direction
+			dirAvailable[locIndex][(direction + 1)%4] = 1;
+			dirAvailable[locIndex][(direction + 3)%4] = 1;
+			printf("car %d : leaving the crossing %s, liberating the directions %d and %d \n", carId, exchangerName, (direction + 1)%4, (direction + 3)%4);
+		}
+		else if(direction == (from + 3)%4){ // if the car is turning to the left, block every direction
+			dirAvailable[locIndex][0] = 1;
+			dirAvailable[locIndex][1] = 1;
+			dirAvailable[locIndex][2] = 1;
+			dirAvailable[locIndex][3] = 1;
+			printf("car %d : leaving the crossing %s, liberating all directions \n", carId, exchangerName);
+		}
+		else if(direction == (from + 1)%4){ // if the car is turning to the right, block the direction and the left relative to the direction
+			dirAvailable[locIndex][direction] = 1;
+			dirAvailable[locIndex][(direction + 1)%4] = 1;
+			printf("car %d : leaving the crossing %s, liberating directions %d and %d \n", carId, exchangerName, direction, (direction + 1)%4);
+		}
+		printf(" booleans after %d crossed : E %d N %d W %d S %d \n", carId, dirAvailable[locIndex][0], dirAvailable[locIndex][1], dirAvailable[locIndex][2], dirAvailable[locIndex][3]);
+		pthread_mutex_unlock(&mutexDir[locIndex][EAST]); pthread_mutex_unlock(&mutexDir[locIndex][NORTH]); pthread_mutex_unlock(&mutexDir[locIndex][WEST]); pthread_mutex_unlock(&mutexDir[locIndex][SOUTH]);
+
 		carMsg.action = LEAVING;
 		msgsnd(msgqIdLocal, &carMsg, sizeof(carMsg) - sizeof(long), 0);
 		printf("car %d leaving exchanger %s, through road %s\n", carId, exchangerName, dirName);
 		usleep(1000000);
 		prevLocation = location;
-		msgsnd(msgqIdLocal, &authAsk, sizeof(AuthAsk) - sizeof(long), 0);
+		msgsnd(msgqIdLocal, &carMsg, sizeof(AuthAsk) - sizeof(long), 0);
 		//// going to new Exchanger
 		if(location->roads[direction] != (Exchanger*)(-1)){
 			location = getExchanger(shExchangers, location->roads[direction]);
@@ -123,9 +218,14 @@ void * run(void * input){
 /*******************************************************************				
 				  DECLARATIONS & INITIALIZATIONS
 ********************************************************************/
- 	int nbCars = NBCARS, i = 0;
+ 	int nbCars = NBCARS, i = 0, j = 0;
  	int ppid = getppid();
- 
+ 	for(i = 0 ; i < 4 ; i++){
+ 		for(j = 0 ; j < 4 ; j++){
+ 			// mutexDir[i][j] = PTHREAD_MUTEX_INITIALIZER;
+ 			dirAvailable[i][j] = 1;
+ 		}
+ 	}
  	key_t shmKey, msgKey;
 	int shmId = -1;
 	//// attachment to segment of shared memory containing Exchangers

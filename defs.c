@@ -124,6 +124,7 @@ int dirAbsPlusRel(int absDir, int relDir){
 	}
 	return r;
 }
+
 /*******************************************************************
 				getExchanger :				
 				  add the relative address to the absolute address of a shared memory in order to access an contained Exchanger

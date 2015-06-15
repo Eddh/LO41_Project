@@ -18,6 +18,11 @@
 #define LEFT 2
 #define BOT 3
 
+#define EAST 0
+#define NORTH 1
+#define WEST 2
+#define SOUTH 3
+
 #define BOT_LEFT 0
 #define BOT_RIGHT 1
 #define TOP_RIGHT 2
@@ -61,6 +66,9 @@ typedef struct AuthAns{
 	long mtype;
 	int Authorization;
 } AuthAns;
+typedef struct EndMsg{
+	long mtype;
+} EndMsg;
 
 typedef struct threadCarData{
 	int carId;
