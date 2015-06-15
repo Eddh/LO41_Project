@@ -1,6 +1,7 @@
 /*
  Name : main.c
  Author : Rémi Dufour
+ Purpose : Managing the processes : cars exchanger server
 */
 
 #include <stdio.h>
@@ -30,13 +31,7 @@ void sigIntHandler(int sig){
 	sem_wait(semShContinue);
 	*p_continue = 0;
 	sem_post(semShContinue);
-	printf("STOP\n");
 }
-
-// void* inputEventThread(){
-
-// 	return NULL;
-// }
 
 int main(int argc, char *argv[]){
 	printf("PROGRAM START\n");

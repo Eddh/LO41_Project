@@ -1,6 +1,7 @@
 /*
  Name : cars.c
  Author : Rémi Dufour
+ Purpose : managing car threads
 */
 
 #include <stdio.h>
@@ -77,7 +78,7 @@ void * run(void * input){
 		printf("car %d arrived at exchanger %s, through road %s with direction %s, verifying availability\n"
 			, carId, exchangerName, fromName, dirName);
 
-		//todo : can the car go through?
+		//asking crossing permission to the local exchanger(unfinished)
 		authAsk.mtype = 2;
 		authAsk.carId = carId;
 		authAsk.from = from;
@@ -95,7 +96,7 @@ void * run(void * input){
 			}
 			else{
 				// active wait
-				printf("car %d  : can't cross, %d %d %d %d waiting\n", carId, dirAvailable[locIndex][0], dirAvailable[locIndex][1], dirAvailable[locIndex][2], dirAvailable[locIndex][3]);
+				printf("car %d  : can't cross, E %d N %d W %d S %d  waiting\n", carId, dirAvailable[locIndex][0], dirAvailable[locIndex][1], dirAvailable[locIndex][2], dirAvailable[locIndex][3]);
 				do{
 					pthread_mutex_unlock(&mutexDir[locIndex][EAST]); pthread_mutex_unlock(&mutexDir[locIndex][NORTH]); pthread_mutex_unlock(&mutexDir[locIndex][WEST]); pthread_mutex_unlock(&mutexDir[locIndex][SOUTH]);
 					usleep(50000);
@@ -116,7 +117,7 @@ void * run(void * input){
 			}
 			else{
 				// active wait
-				printf("car %d  : can't cross, %d %d %d %d waiting\n", carId, dirAvailable[locIndex][0], dirAvailable[locIndex][1], dirAvailable[locIndex][2], dirAvailable[locIndex][3]);
+				printf("car %d  : can't cross, E %d N %d W %d S %d  waiting\n", carId, dirAvailable[locIndex][0], dirAvailable[locIndex][1], dirAvailable[locIndex][2], dirAvailable[locIndex][3]);
 				do{
 					pthread_mutex_unlock(&mutexDir[locIndex][EAST]); pthread_mutex_unlock(&mutexDir[locIndex][NORTH]); pthread_mutex_unlock(&mutexDir[locIndex][WEST]); pthread_mutex_unlock(&mutexDir[locIndex][SOUTH]);
 					usleep(50000);
@@ -138,7 +139,7 @@ void * run(void * input){
 			}
 			else{
 				// active wait
-				printf("car %d  : can't cross, %d %d %d %d waiting\n", carId, dirAvailable[locIndex][0], dirAvailable[locIndex][1], dirAvailable[locIndex][2], dirAvailable[locIndex][3]);
+				printf("car %d  : can't cross, E %d N %d W %d S %d  waiting\n", carId, dirAvailable[locIndex][0], dirAvailable[locIndex][1], dirAvailable[locIndex][2], dirAvailable[locIndex][3]);
 				do{
 					pthread_mutex_unlock(&mutexDir[locIndex][EAST]); pthread_mutex_unlock(&mutexDir[locIndex][NORTH]); pthread_mutex_unlock(&mutexDir[locIndex][WEST]); pthread_mutex_unlock(&mutexDir[locIndex][SOUTH]);
 					usleep(50000);
@@ -149,7 +150,7 @@ void * run(void * input){
 				dirAvailable[locIndex][(direction + 1)%4] = 0;
 			}
 		}
-		printf(" booleans after entering : E %d N %d W %d S %d \n", dirAvailable[locIndex][0], dirAvailable[locIndex][1], dirAvailable[locIndex][2], dirAvailable[locIndex][3]);
+		printf("booleans after car %d entered : E %d N %d W %d S %d \n", carId, dirAvailable[locIndex][0], dirAvailable[locIndex][1], dirAvailable[locIndex][2], dirAvailable[locIndex][3]);
 		pthread_mutex_unlock(&mutexDir[locIndex][EAST]); pthread_mutex_unlock(&mutexDir[locIndex][NORTH]); pthread_mutex_unlock(&mutexDir[locIndex][WEST]); pthread_mutex_unlock(&mutexDir[locIndex][SOUTH]);
 
 		carMsg.action = CROSSING;
@@ -186,7 +187,7 @@ void * run(void * input){
 		usleep(1000000);
 		prevLocation = location;
 		msgsnd(msgqIdLocal, &carMsg, sizeof(AuthAsk) - sizeof(long), 0);
-		//// going to new Exchanger
+		//// going to new Exchanger : updating variables
 		if(location->roads[direction] != (Exchanger*)(-1)){
 			location = getExchanger(shExchangers, location->roads[direction]);
 			from = invDirection(direction);
@@ -222,7 +223,6 @@ void * run(void * input){
  	int ppid = getppid();
  	for(i = 0 ; i < 4 ; i++){
  		for(j = 0 ; j < 4 ; j++){
- 			// mutexDir[i][j] = PTHREAD_MUTEX_INITIALIZER;
  			dirAvailable[i][j] = 1;
  		}
  	}

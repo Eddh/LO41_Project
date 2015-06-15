@@ -1,6 +1,7 @@
 /*
  Name : exchanger.c
  Author : Rémi Dufour
+ Purpose : managing exchanger threads
 */
 
 #include <stdio.h>
@@ -20,7 +21,7 @@
 #include <sys/stat.h>
 
 #include "defs.h"
-//pthread_mutex_t ThreadNum_Mutex = PTHREAD_MUTEX_INITIALIZER;
+ 
 Exchanger* shExchangers;
 sem_t* semShExchangers;
 sem_t* semShContinue;
@@ -42,7 +43,6 @@ void sigIntHandler(int sig){
 	for(i = 0 ; i < 4 ; i++){
 		msgsnd(msgqIdExchangers[i], &endMsg, sizeof(EndMsg) - sizeof(long), 0);
 	}
-	printf("hello\n");
 }
 
 void* run(void* input){
@@ -56,11 +56,14 @@ void* run(void* input){
 	CarMsg carMsg;
 	Exchanger* thisExchanger = &shExchangers[exchangerIndex];
 	printf("EXCHANGER index %d name %s\n", exchangerIndex, thisExchanger->name);
+/*******************************************************************				
+				  			EXCHANGER LOOP
+********************************************************************/
 	do{
 		msgrcv(thisExchanger->msgqId, &carMsg, sizeof(CarMsg) - sizeof(long), -4, 0);
 		switch(carMsg.mtype){
 			case 1 : // CarMsg
-				//printf("Exchanger %s has received a message from car %d which is %s\n", thisExchanger->name, carMsg.carId, actionNames[carMsg.action]);
+				printf("Exchanger %s has received a message from car %d which is %s\n", thisExchanger->name, carMsg.carId, actionNames[carMsg.action]);
 			break;
 			case 2 : // AuthAsk
 				printf("Exchanger %s has received a message from car %d which asks to cross\n", thisExchanger->name, carMsg.carId);
@@ -68,7 +71,7 @@ void* run(void* input){
 			case 3 : // AuthAns
 			break;
 			case 4 : // EndMsg
-
+			break;
 			default :
 				printf("error exchanger.c:switch\n");
 			break;
@@ -180,7 +183,7 @@ int main(int argc, char* argv[]){
 
 	for (i = 0 ; i<4 ; i++){
 		pthread_join(threadId[i], NULL);
-		printf("okkk thread %d joined\n\n\n", i);
+		printf("thread %d joined\n", i);
 	}
 	
 	//// REMOVING MESSAGE QUEUES FOR EACH EXCHANGER

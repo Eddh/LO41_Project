@@ -13,6 +13,7 @@
 #include <signal.h>
 
 #define NBCARS 10
+
 #define RIGHT 0
 #define TOP 1
 #define LEFT 2
